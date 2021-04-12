@@ -1,6 +1,9 @@
+mod proto;
+
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::SinkExt;
+use prost::Message;
 use std::{error::Error, fmt, fs, io, usize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
@@ -18,12 +21,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match listener.accept().await {
             Ok((socket, _)) => {
+                println!("new client");
                 tokio::spawn(async move {
                     let mut transport = Framed::new(socket, Protocol::new());
                     while let Some(request) = transport.next().await {
                         println!("request {:?}", request);
-                        let data = b"fdasfsa";
-                        transport.send(data.to_vec()).await.unwrap();
+                        match request {
+                            Ok(data) => {
+                                let hello_req =
+                                    proto::helloworld::HelloRequest::decode(&data[..]).unwrap();
+                                // println!("{:?}", hello_req.name);
+                                let name = hello_req.name.as_bytes();
+                                transport.send(name.to_vec()).await.unwrap();
+                            }
+                            Err(e) => {
+                                println!("{:?}", e)
+                            }
+                        }
                     }
                 });
             }
@@ -56,7 +70,7 @@ impl Decoder for Protocol {
                 return Ok(None);
             }
             let body = buf.split_to((body_len + 4) as usize);
-            Ok(Some(body[5..].to_vec()))
+            Ok(Some(body[4..].to_vec()))
         } else {
             Ok(None)
         }
