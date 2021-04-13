@@ -7,14 +7,34 @@ use prost::Message;
 use std::{error::Error, fmt, fs, io, usize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
+use tokio::signal;
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 const SOCKET_PATH: &str = "/tmp/tokio.domain.socket";
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    fs::remove_file(SOCKET_PATH)?;
+async fn main() {
+    tokio::select! {
+        res = run_server() => {
+            if let Err(err) = res {
+                println!("err {:?}", err)
+            }
+        },
+        _ = signal::ctrl_c() => {
+            match fs::remove_file(SOCKET_PATH) {
+                Ok(_) => {
+                    println!("removed socket file")
+                },
+                Err(e) => {
+                    println!("e {:?}", e)
+                }
+            }
+        }
+    }
+}
+
+async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let listener = UnixListener::bind(SOCKET_PATH)?;
     loop {
         // let (socket, _) = listener.accept().await?;
